@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import { loginUser } from '../../services/authService';
+import { validateEmail, validatePassword } from '../../utils/validation';
 import {
   TextField,
   Button,
@@ -41,6 +42,10 @@ const Login = () => {
   const [apiError, setApiError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState({
+    message: '',
+    strength: 0,
+  });
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -54,24 +59,16 @@ const Login = () => {
   };
 
   const validateForm = () => {
-    let isValid = true;
-    const newErrors = { email: '', password: '' };
+    const emailValidation = validateEmail(formData.email);
+    const passwordValidation = validatePassword(formData.password);
 
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
-      isValid = false;
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-      isValid = false;
-    }
+    const newErrors = {
+      email: emailValidation.message,
+      password: passwordValidation.message,
+    };
 
     setErrors(newErrors);
-    return isValid;
+    return emailValidation.isValid && passwordValidation.isValid;
   };
 
   const handleSubmit = async (e) => {
@@ -87,7 +84,7 @@ const Login = () => {
       navigate(userData.isAdmin ? '/admin' : '/');
     } catch (error) {
       console.error('Login error:', error);
-      setApiError(error.message || 'Invalid email or password');
+      setApiError(error.error || 'Invalid email or password');
       setFormData((prev) => ({ ...prev, password: '' }));
     } finally {
       setLoading(false);
@@ -121,12 +118,17 @@ const Login = () => {
           margin="normal"
           label="Email"
           name="email"
+          type="email"
           value={formData.email}
           onChange={handleChange}
           error={!!errors.email}
           helperText={errors.email}
           autoComplete="email"
           disabled={loading}
+          aria-label="Email Address"
+          InputProps={{
+            'aria-describedby': errors.email ? 'email-error' : undefined,
+          }}
         />
 
         <TextField
@@ -141,13 +143,16 @@ const Login = () => {
           helperText={errors.password}
           autoComplete="current-password"
           disabled={loading}
+          aria-label="Password"
           InputProps={{
+            'aria-describedby': errors.password ? 'password-error' : undefined,
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton
                   onClick={() => setShowPassword(!showPassword)}
                   edge="end"
                   disabled={loading}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <VisibilityOff /> : <Visibility />}
                 </IconButton>
@@ -169,8 +174,7 @@ const Login = () => {
           }}
           disabled={loading}
         >
-          {loading ? <CircularProgress size={24} color="inherit"  /> : 'Sign In'}
-
+          {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
         </Button>
 
         {apiError && (

@@ -22,24 +22,43 @@ const RecentOrders = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     const fetchOrders = async () => {
       try {
-        const data = await getOrders();
+        const data = await getOrders({ signal: abortController.signal });
+        if (!isMounted) return;
+
         const sortedOrders = data.data
           .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           .slice(0, 5);
         setOrders(sortedOrders);
       } catch (err) {
-        setError(err.message);
+        if (!isMounted) return;
+        if (err.name === 'AbortError') return;
+
+        const errorMessage = err.response?.data?.message || err.message || 'Failed to fetch orders';
+        setError(errorMessage);
+        console.error('Error fetching orders:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
+
     fetchOrders();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, []);
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
+      setLoading(true);
       await updateOrderStatus(orderId, newStatus);
       setOrders((prev) =>
         prev.map((order) =>
@@ -47,7 +66,11 @@ const RecentOrders = () => {
         ),
       );
     } catch (err) {
-      setError(err.message);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to update order status';
+      setError(errorMessage);
+      console.error('Error updating order status:', err);
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -4,20 +4,31 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000/api/v1',
   withCredentials: true,
-  timeout: 10000, // 10 seconds timeout
+  timeout: 15000, // 15 seconds timeout for better reliability
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
+  // Enable request retries for better reliability
+  retry: 2,
+  retryDelay: (retryCount) => retryCount * 1000,
+  // Enable response compression
+  decompress: true,
 });
 
 // Request interceptor for adding authorization token and handling errors
 api.interceptors.request.use(
   async (config) => {
     // Skip token addition for auth routes
-    const authRoutes = ['/login', '/register', '/refresh-token'];
+    const authRoutes = ['/login', '/register', '/refresh-token', '/forgot-password', '/reset-password'];
     if (authRoutes.some((route) => config.url?.includes(route))) {
       return config;
+    }
+
+    // Add cache control headers for GET requests
+    if (config.method === 'get') {
+      config.headers['Cache-Control'] = 'no-cache';
+      config.headers['Pragma'] = 'no-cache';
     }
 
     try {
@@ -77,18 +88,34 @@ api.interceptors.response.use(
 
     // Global error handling for other status codes
     if (error.response) {
-      switch (error.response.status) {
+      const status = error.response.status;
+      switch (status) {
+        case 400:
+          console.error('Bad Request:', error.response.data);
+          break;
+        case 403:
+          console.error('Forbidden:', error.response.data);
+          window.location.href = '/forbidden';
+          break;
         case 404:
           window.location.href = '/not-found';
           break;
-        // Extend here for other statuses like 500 if needed
-        default:
+        case 429:
+          console.error('Rate limit exceeded');
+          // Implement exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, originalRequest._retryCount || 0)));
+          return api(originalRequest);
+        case 500:
+          console.error('Server Error:', error.response.data);
           break;
-      }
+        default:
+          if (status >= 500) {
+            console.error('Server Error:', error.response.data);
+          }
     }
 
     return Promise.reject(error);
-  },
+  }},
 );
 
 // Development logging for requests and responses

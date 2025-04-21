@@ -140,3 +140,19 @@ export const refreshToken = async (refreshToken) => {
     throw new Error(message);
   }
 };
+
+export const resendVerification = async (email) => {
+  try {
+    const response = await api.post('/users/resend-verification', { email });
+    if (!response.data?.success) {
+      throw new Error('Failed to resend verification email');
+    }
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.error ||
+      error.message ||
+      'Failed to resend verification email';
+    throw new Error(message);
+  }
+};

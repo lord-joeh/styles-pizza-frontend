@@ -1,7 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
-import { registerUser } from '../../services/authService';
+import { registerUser, verifyEmail } from '../../services/authService';
+import VerifyEmail from '../auth/VerifyEmail';
 import {
   TextField,
   Button,
@@ -15,6 +16,13 @@ import {
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import {
+  validateEmail,
+  validatePassword,
+  validatePhoneNumber,
+  validateName,
+} from '../../utils/validation';
+import LinearProgress from '@mui/material/LinearProgress';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(4),
@@ -42,6 +50,7 @@ const Register = () => {
     password: '',
     phone: '',
   });
+  const [passwordStrength, setPasswordStrength] = useState(0);
   const [errors, setErrors] = useState({
     name: '',
     email: '',
@@ -59,10 +68,15 @@ const Register = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
     setApiError('');
+
+    // Update password strength when password changes
+    if (name === 'password') {
+      const { strength } = validatePassword(value);
+      setPasswordStrength(strength * 20); // Convert 0-5 scale to 0-100
+    }
   };
 
   const validateForm = () => {
-    let isValid = true;
     const newErrors = {
       name: '',
       email: '',
@@ -70,42 +84,29 @@ const Register = () => {
       phone: '',
     };
 
-    // Name validation
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-      isValid = false;
-    }
+    // Name validation using utility function
+    const nameValidation = validateName(formData.name);
+    newErrors.name = nameValidation.message;
 
-    // Email validation
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
-      isValid = false;
-    }
+    // Email validation using utility function
+    const emailValidation = validateEmail(formData.email);
+    newErrors.email = emailValidation.message;
 
-    // Password validation
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-      isValid = false;
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-      isValid = false;
-    }
+    // Password validation using utility function
+    const passwordValidation = validatePassword(formData.password);
+    newErrors.password = passwordValidation.message;
 
-    // Phone validation (accepts digits only, 10 digits required)
-    const cleanedPhone = formData.phone.replace(/\D/g, '');
-    if (!cleanedPhone) {
-      newErrors.phone = 'Phone number is required';
-      isValid = false;
-    } else if (cleanedPhone.length !== 10) {
-      newErrors.phone = 'Phone number must be 10 digits';
-      isValid = false;
-    }
+    // Phone validation using utility function
+    const phoneValidation = validatePhoneNumber(formData.phone);
+    newErrors.phone = phoneValidation.message;
 
     setErrors(newErrors);
-    return isValid;
+    return (
+      nameValidation.isValid &&
+      emailValidation.isValid &&
+      passwordValidation.isValid &&
+      phoneValidation.isValid
+    );
   };
 
   const handlePhoneChange = (e) => {
@@ -142,18 +143,25 @@ const Register = () => {
 
     try {
       const cleanedPhone = formData.phone.replace(/\D/g, '');
-      const userData = await registerUser({
+      const response = await registerUser({
         ...formData,
         phone: cleanedPhone,
       });
-
-      await login(userData);
-      navigate('/');
+      console.log('Registration successful:', response);
+      // Extract verification token and redirect to verify email page
+      const verificationToken = response.user.verification_token;
+      navigate(`/verify-email/${verificationToken}`, {
+        state: {
+          email: formData.email,
+          token: verificationToken,
+          message: response.message || 'Please check your email to verify your account.',
+          fromRegistration: true
+        },
+      });
     } catch (error) {
       console.error('Registration error:', error);
       setApiError(
-        error.response?.data?.message ||
-          'Registration failed. Please try again.',
+        error.response?.data?.error?.message || 'Registration failed. Please try again.',
       );
       setFormData((prev) => ({
         ...prev,
@@ -211,6 +219,10 @@ const Register = () => {
           helperText={errors.email}
           disabled={loading}
           autoComplete="email"
+          aria-label="Email Address"
+          InputProps={{
+            'aria-describedby': errors.email ? 'email-error' : undefined,
+          }}
         />
 
         <TextField
@@ -224,13 +236,17 @@ const Register = () => {
           error={!!errors.password}
           helperText={errors.password}
           disabled={loading}
+          autoComplete="new-password"
+          aria-label="Password"
           InputProps={{
+            'aria-describedby': errors.password ? 'password-error' : undefined,
             endAdornment: (
               <InputAdornment position="end">
                 <IconButton
                   onClick={() => setShowPassword(!showPassword)}
                   edge="end"
                   disabled={loading}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <VisibilityOff /> : <Visibility />}
                 </IconButton>
@@ -238,20 +254,67 @@ const Register = () => {
             ),
           }}
         />
+        {formData.password && (
+          <Box sx={{ width: '100%', mt: 1 }}>
+            <LinearProgress
+              variant="determinate"
+              value={passwordStrength}
+              sx={{
+                height: 8,
+                borderRadius: 5,
+                backgroundColor: '#e0e0e0',
+                '& .MuiLinearProgress-bar': {
+                  backgroundColor:
+                    passwordStrength <= 40
+                      ? '#f44336'
+                      : passwordStrength <= 60
+                      ? '#ff9800'
+                      : '#4caf50',
+                },
+              }}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                mt: 0.5,
+                display: 'block',
+                color:
+                  passwordStrength <= 40
+                    ? '#f44336'
+                    : passwordStrength <= 60
+                    ? '#ff9800'
+                    : '#4caf50',
+              }}
+            >
+              Password Strength:{' '}
+              {passwordStrength <= 40
+                ? 'Weak'
+                : passwordStrength <= 60
+                ? 'Moderate'
+                : 'Strong'}
+            </Typography>
+          </Box>
+        )}
 
         <TextField
           fullWidth
           margin="normal"
           label="Phone Number"
           name="phone"
+          type="tel"
           value={formData.phone}
           onChange={handlePhoneChange}
           error={!!errors.phone}
           helperText={errors.phone}
           disabled={loading}
+          autoComplete="tel"
+          aria-label="Phone Number"
           placeholder="(123) 456-7890"
           inputProps={{
-            maxLength: 14, // (123) 456-7890 is 14 characters
+            maxLength: 14,
+          }}
+          InputProps={{
+            'aria-describedby': errors.phone ? 'phone-error' : undefined,
           }}
         />
 

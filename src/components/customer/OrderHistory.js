@@ -358,7 +358,7 @@ const OrderHistory = () => {
                             aria-label={`Order status: ${order.status}`}
                           />
                           <Typography variant="subtitle1" fontWeight="bold">
-                            GHS {order.total_amount?.toFixed(2) || '0.00'}
+                            GHS {order.total_amount || '0.00'}
                           </Typography>
                         </Box>
                       </Grid>

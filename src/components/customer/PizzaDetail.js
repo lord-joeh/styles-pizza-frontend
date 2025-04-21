@@ -90,50 +90,72 @@ const PizzaDetail = () => {
   const { addToCart } = useContext(CartContext);
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     const fetchPizza = async () => {
       try {
         setStatus((prev) => ({ ...prev, loading: true }));
-        const response = await getPizzaById(id);
+        const response = await getPizzaById(id, { signal: abortController.signal });
+        if (!isMounted) return;
+
         setPizza(response.data);
         
         const favorites = JSON.parse(localStorage.getItem('favoritePizzas')) || [];
         setFavorite(favorites.includes(response.data?.id));
       } catch (err) {
+        if (!isMounted) return;
+        if (err.name === 'AbortError') return;
+
         const errorMessage =
           err.response?.data?.message ||
+          err.message ||
           'Failed to load pizza details. Please try again later.';
         setStatus((prev) => ({ ...prev, error: errorMessage }));
         showSnackbar(errorMessage, 'error');
+        console.error('Error fetching pizza:', err);
       } finally {
-        setStatus((prev) => ({ ...prev, loading: false }));
+        if (isMounted) {
+          setStatus((prev) => ({ ...prev, loading: false }));
+        }
       }
     };
 
     fetchPizza();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [id]);
 
   const toggleFavorite = () => {
     if (!pizza) return;
     
-    setFavorite((prev) => {
-      const newFavorite = !prev;
-      const favorites = JSON.parse(localStorage.getItem('favoritePizzas')) || [];
-      
-      if (newFavorite) {
-        localStorage.setItem('favoritePizzas', JSON.stringify([...favorites, pizza.id]));
-      } else {
-        localStorage.setItem(
-          'favoritePizzas',
-          JSON.stringify(favorites.filter((id) => id !== pizza.id))
+    try {
+      setFavorite((prev) => {
+        const newFavorite = !prev;
+        const favorites = JSON.parse(localStorage.getItem('favoritePizzas')) || [];
+        
+        if (newFavorite) {
+          localStorage.setItem('favoritePizzas', JSON.stringify([...favorites, pizza.id]));
+        } else {
+          localStorage.setItem(
+            'favoritePizzas',
+            JSON.stringify(favorites.filter((id) => id !== pizza.id))
+          );
+        }
+        
+        showSnackbar(
+          newFavorite ? 'Added to favorites!' : 'Removed from favorites!',
+          'success'
         );
-      }
-      
-      showSnackbar(
-        newFavorite ? 'Added to favorites!' : 'Removed from favorites!',
-        'success'
-      );
-      return newFavorite;
-    });
+        return newFavorite;
+      });
+    } catch (err) {
+      console.error('Error updating favorites:', err);
+      showSnackbar('Failed to update favorites. Please try again.', 'error');
+    }
   };
 
   const showSnackbar = (message, severity = 'success') => {

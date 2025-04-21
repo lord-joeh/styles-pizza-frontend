@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useRef, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { getPizzas } from '../../services/pizzaService';
 import { CartContext } from '../../context/CartContext';
+import ErrorBoundary from '../common/ErrorBoundary';
 import {
   Typography,
   Paper,
@@ -34,16 +35,16 @@ import {
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(2),
+  padding: theme.spacing(3),
   margin: theme.spacing(2, 'auto'),
   borderRadius: '12px',
   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
   backgroundColor: theme.palette.background.paper,
-  width: '1300px',
+  width: '100%',
   overflow: 'hidden',
   [theme.breakpoints.down('sm')]: {
     padding: theme.spacing(2),
-    margin: theme.spacing(2, 'auto'),
+    margin: theme.spacing(1, 'auto'),
   },
 }));
 
@@ -156,8 +157,103 @@ const FavoriteButton = styled(IconButton)(({ theme }) => ({
   },
 }));
 
+const PizzaCard = memo(({ pizza, onFavoriteToggle, onAddToCart, isFavorite }) => (
+  <StyledCard>
+    <StyledCardMedia
+      component="img"
+      image={pizza.image || '/placeholder-pizza.jpg'}
+      alt={pizza.name}
+      onError={(e) => {
+        e.target.onerror = null;
+        e.target.src = '/placeholder-pizza.jpg';
+      }}
+    />
+    <FavoriteButton
+      aria-label="add to favorites"
+      onClick={() => onFavoriteToggle(pizza.id)}
+    >
+      {isFavorite ? <Favorite color="error" /> : <FavoriteBorder />}
+    </FavoriteButton>
+    <StyledCardContent>
+      <Box display="flex" justifyContent="space-between">
+        <Typography
+          variant="h6"
+          component="h3"
+          gutterBottom
+          sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
+        >
+          {pizza.name}
+        </Typography>
+        {pizza.isPopular && (
+          <Tooltip title="Popular choice" arrow>
+            <Badge badgeContent="🔥" color="error" />
+          </Tooltip>
+        )}
+      </Box>
+      <Box display="flex" alignItems="center" gap={1} mb={2}>
+        <Chip
+          label={pizza.size}
+          color="primary"
+          size="small"
+          sx={{ fontSize: { xs: '0.7rem', sm: '0.8rem' } }}
+        />
+        <Rating
+          name="pizza-rating"
+          value={pizza.rating || 4}
+          precision={0.5}
+          readOnly
+          size="small"
+          sx={{ fontSize: { xs: '1rem', sm: '1.2rem' } }}
+        />
+      </Box>
+      <Typography
+        variant="body2"
+        color="text.secondary"
+        paragraph
+        sx={{
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          fontSize: { xs: '0.8rem', sm: '0.9rem' },
+        }}
+      >
+        {pizza.description}
+      </Typography>
+      <Typography
+        variant="h6"
+        sx={{
+          fontWeight: 'bold',
+          color: 'primary.main',
+          mt: 1,
+          fontSize: { xs: '1rem', sm: '1.1rem' },
+        }}
+      >
+        GHS {pizza.price}
+      </Typography>
+    </StyledCardContent>
+    <StyledCardActions>
+      <StyledButton
+        component={Link}
+        to={`/customer/pizza/${pizza.id}`}
+        startIcon={<Info />}
+      >
+        Details
+      </StyledButton>
+      <StyledButton
+        onClick={() => onAddToCart(pizza)}
+        startIcon={<ShoppingCart />}
+      >
+        Add to Cart
+      </StyledButton>
+    </StyledCardActions>
+  </StyledCard>
+));
+
 const PizzaList = () => {
   const [pizzas, setPizzas] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [status, setStatus] = useState({
     loading: true,
     error: null,
@@ -170,11 +266,36 @@ const PizzaList = () => {
   });
   const { addToCart } = useContext(CartContext);
 
+  const observer = useRef();
+  const lastPizzaElementRef = useCallback(
+    (node) => {
+      if (status.loading) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && hasMore) {
+          setPage((prevPage) => prevPage + 1);
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [status.loading, hasMore]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (observer.current) {
+        observer.current.disconnect();
+      }
+    };
+  }, []);
+
   const fetchPizzas = async () => {
     try {
       setStatus((prev) => ({ ...prev, loading: true }));
-      const response = await getPizzas();
-      setPizzas(response.data || []);
+      const response = await getPizzas({ page, limit: 12 });
+      const newPizzas = response.data || [];
+      setPizzas((prev) => (page === 1 ? newPizzas : [...prev, ...newPizzas]));
+      setHasMore(newPizzas.length === 12);
       setStatus((prev) => ({ ...prev, error: null }));
     } catch (err) {
       const errorMessage =
@@ -189,6 +310,9 @@ const PizzaList = () => {
 
   useEffect(() => {
     fetchPizzas();
+  }, [page]);
+
+  useEffect(() => {
 
     // Load favorites from localStorage
     const savedFavorites =
@@ -221,19 +345,27 @@ const PizzaList = () => {
     showSnackbar(`${pizza.name} added to cart!`);
   };
 
-  if (status.loading) {
+  if (status.loading && !pizzas.length) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Grid container spacing={4}>
           {[...Array(6)].map((_, index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
-              <Skeleton variant="rectangular" height={220} animation="wave" />
-              <Box sx={{ pt: 0.5 }}>
-                <Skeleton animation="wave" />
-                <Skeleton width="60%" animation="wave" />
-                <Skeleton width="80%" animation="wave" />
-                <Skeleton width="40%" animation="wave" />
-              </Box>
+              <StyledCard>
+                <Skeleton
+                  variant="rectangular"
+                  height={200}
+                  sx={{ borderRadius: '12px 12px 0 0' }}
+                />
+                <StyledCardContent>
+                  <Skeleton variant="text" height={32} width="60%" />
+                  <Skeleton variant="text" height={20} width="40%" />
+                  <Skeleton variant="text" height={60} />
+                </StyledCardContent>
+                <StyledCardActions>
+                  <Skeleton variant="rectangular" height={36} width="100%" />
+                </StyledCardActions>
+              </StyledCard>
             </Grid>
           ))}
         </Grid>
@@ -259,7 +391,7 @@ const PizzaList = () => {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       <StyledPaper>
         <StyledTitle variant="h4" component="h1">
           <LocalPizza fontSize="large" />
@@ -271,9 +403,9 @@ const PizzaList = () => {
             No pizzas available at the moment. Please check back later!
           </Typography>
         ) : (
-          <Container maxWidth="xl" sx={{ px: { xs: 1, sm: 3 } }}>
+          <Container maxWidth={false} sx={{ px: { xs: 1, sm: 2, md: 3 }, maxWidth: '1800px' }}>
             <Grid container spacing={{ xs: 2, sm: 3, md: 4 }}>
-              {pizzas.map((pizza) => (
+              {pizzas.map((pizza, index) => (
                 <Grid
                   item
                   xs={12}
@@ -281,106 +413,19 @@ const PizzaList = () => {
                   md={4}
                   lg={3}
                   key={pizza.id}
+                  ref={pizzas.length === index + 1 ? lastPizzaElementRef : null}
                   sx={{
                     display: 'flex',
                     justifyContent: 'center',
                     padding: { xs: '8px!important', sm: '16px!important' },
                   }}
                 >
-                  <StyledCard>
-                    <StyledCardMedia
-                      component="img"
-                      image={pizza.image || '/placeholder-pizza.jpg'}
-                      alt={pizza.name}
-                      onError={(e) => {
-                        e.target.onerror = null;
-                        e.target.src = '/placeholder-pizza.jpg';
-                      }}
-                    />
-                    <FavoriteButton
-                      aria-label="add to favorites"
-                      onClick={() => toggleFavorite(pizza.id)}
-                    >
-                      {favorites.includes(pizza.id) ? (
-                        <Favorite color="error" />
-                      ) : (
-                        <FavoriteBorder />
-                      )}
-                    </FavoriteButton>
-                    <StyledCardContent>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography
-                          variant="h6"
-                          component="h3"
-                          gutterBottom
-                          sx={{ fontSize: { xs: '1rem', sm: '1.1rem' } }}
-                        >
-                          {pizza.name}
-                        </Typography>
-                        {pizza.isPopular && (
-                          <Tooltip title="Popular choice" arrow>
-                            <Badge badgeContent="🔥" color="error" />
-                          </Tooltip>
-                        )}
-                      </Box>
-                      <Box display="flex" alignItems="center" gap={1} mb={2}>
-                        <Chip
-                          label={pizza.size}
-                          color="primary"
-                          size="small"
-                          sx={{ fontSize: { xs: '0.7rem', sm: '0.8rem' } }}
-                        />
-                        <Rating
-                          name="pizza-rating"
-                          value={pizza.rating || 4}
-                          precision={0.5}
-                          readOnly
-                          size="small"
-                          sx={{ fontSize: { xs: '1rem', sm: '1.2rem' } }}
-                        />
-                      </Box>
-                      <Typography
-                        variant="body2"
-                        color="text.secondary"
-                        paragraph
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 3,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          fontSize: { xs: '0.8rem', sm: '0.9rem' },
-                        }}
-                      >
-                        {pizza.description}
-                      </Typography>
-                      <Typography
-                        variant="h6"
-                        sx={{
-                          fontWeight: 'bold',
-                          color: 'primary.main',
-                          mt: 1,
-                          fontSize: { xs: '1rem', sm: '1.1rem' },
-                        }}
-                      >
-                        GHS {pizza.price}
-                      </Typography>
-                    </StyledCardContent>
-                    <StyledCardActions>
-                      <StyledButton
-                        component={Link}
-                        to={`/customer/pizza/${pizza.id}`}
-                        startIcon={<Info />}
-                      >
-                        Details
-                      </StyledButton>
-                      <StyledButton
-                        onClick={() => handleAddToCart(pizza)}
-                        startIcon={<ShoppingCart />}
-                      >
-                        Add to Cart
-                      </StyledButton>
-                    </StyledCardActions>
-                  </StyledCard>
+                  <PizzaCard
+                    pizza={pizza}
+                    onFavoriteToggle={toggleFavorite}
+                    onAddToCart={handleAddToCart}
+                    isFavorite={favorites.includes(pizza.id)}
+                  />
                 </Grid>
               ))}
             </Grid>
@@ -402,7 +447,7 @@ const PizzaList = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </>
+    </ErrorBoundary>
   );
 };
 

@@ -88,21 +88,38 @@ const OrderDetails = () => {
   });
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
     const fetchOrder = async () => {
       try {
-        const response = await getOrder(id);
+        const response = await getOrder(id, { signal: abortController.signal });
+        if (!isMounted) return;
+
         setOrder(response.data);
       } catch (err) {
+        if (!isMounted) return;
+        if (err.name === 'AbortError') return;
+
         const errorMessage =
           err.response?.data?.message ||
+          err.message ||
           'Failed to load order details. Please try again later.';
         setStatus((prev) => ({ ...prev, error: errorMessage }));
+        console.error('Error fetching order:', err);
       } finally {
-        setStatus((prev) => ({ ...prev, loading: false }));
+        if (isMounted) {
+          setStatus((prev) => ({ ...prev, loading: false }));
+        }
       }
     };
 
     fetchOrder();
+
+    return () => {
+      isMounted = false;
+      abortController.abort();
+    };
   }, [id]);
 
   const formatDate = (dateString) => {
@@ -267,7 +284,7 @@ const OrderDetails = () => {
       </Typography>
       <StyledList>
         {order.items.map((item) => (
-          <StyledListItem key={`${item.pizza_id}-${item.size}`}>
+          <StyledListItem key={`${item.id}-${item.size}`}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Avatar
                 src={item.pizza_image}

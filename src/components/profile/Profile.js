@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { getProfile, updateProfile } from '../../services/authService';
 import { AuthContext } from '../../context/AuthContext';
+import ResetPassword from '../auth/ResetPassword'
 import {
   Typography,
   Paper,
@@ -289,6 +290,7 @@ const Profile = () => {
             Cancel
           </Button>
         </Stack>
+        < ResetPassword />
       </Box>
     </StyledPaper>
   );

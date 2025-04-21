@@ -8,6 +8,7 @@ import {
   CircularProgress,
   Alert,
   Box,
+  LinearProgress,
 } from '@mui/material';
 import { validateEmail } from '../../utils/validation';
 import { styled } from '@mui/material/styles';
@@ -118,6 +119,10 @@ const ForgotPassword = () => {
           disabled={loading}
           autoComplete="email"
           autoFocus
+          aria-label="Email Address"
+          InputProps={{
+            'aria-describedby': errors.email ? 'email-error' : undefined
+          }}
         />
 
         <Button
@@ -134,7 +139,10 @@ const ForgotPassword = () => {
           disabled={loading}
         >
           {loading ? (
-            <CircularProgress size={24} color="inherit" />
+            <>
+              <CircularProgress size={24} color="inherit" />
+              <span className="sr-only">Sending reset link...</span>
+            </>
           ) : (
             'Send Reset Link'
           )}
