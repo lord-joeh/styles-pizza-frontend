@@ -81,7 +81,7 @@ const Login = () => {
     try {
       const userData = await loginUser(formData.email, formData.password);
       await login(userData); // Wait for context login to complete
-      navigate(userData.isAdmin ? '/admin' : '/');
+      navigate(userData.isAdmin ? '/admin' : '/customer/pizzas');
     } catch (error) {
       console.error('Login error:', error);
       setApiError(error.error || 'Invalid email or password');

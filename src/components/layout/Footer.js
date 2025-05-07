@@ -59,7 +59,7 @@ const Footer = () => {
           <Typography variant="h6" gutterBottom>
             Quick Links
           </Typography>
-          <FooterLink href="/menu" underline="none">
+          <FooterLink href="/customer/pizzas" underline="none">
             Menu
           </FooterLink>
           <FooterLink href="/about" underline="none">
@@ -75,13 +75,13 @@ const Footer = () => {
             Contact Us
           </Typography>
           <Typography variant="body2">
-            123 Pizza Street
+            Accra, Ghana
           </Typography>
           <Typography variant="body2">
-            City, State 12345
+            Accra
           </Typography>
           <Typography variant="body2">
-            (555) 123-4567
+            (025) 626-9405
           </Typography>
         </FooterSection>
 
@@ -107,7 +107,7 @@ const Footer = () => {
       </FooterContent>
 
       <CopyrightText variant="body2">
-        &copy; {new Date().getFullYear()} Pizza App. All rights reserved.
+        &copy; {new Date().getFullYear()} Styles Pizza. All rights reserved.
       </CopyrightText>
     </StyledFooter>
   );
